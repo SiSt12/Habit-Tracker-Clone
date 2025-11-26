@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firestore_service.dart';
 
 void main() async {
@@ -89,10 +90,24 @@ class Habit {
       name: json['name'],
       icon: IconData(json['icon'], fontFamily: 'MaterialIcons'),
       color: Color(json['color']),
-      history: List<bool>.from(json['history']),
+      history: _parseHistory(json['history']),
       archived: json['archived'] ?? false,
-      createdAt: DateTime.parse(json['createdAt']),
+      createdAt: json['createdAt'] is Timestamp 
+          ? (json['createdAt'] as Timestamp).toDate() 
+          : DateTime.parse(json['createdAt'].toString()),
     );
+  }
+
+  static List<bool> _parseHistory(dynamic historyJson) {
+    if (historyJson == null || historyJson is! List) {
+      return List.filled(5, false);
+    }
+    final list = historyJson.map((e) => e as bool).toList();
+    if (list.length < 5) {
+      return [...list, ...List.filled(5 - list.length, false)];
+    }
+    return list;
+  }
   }
 }
 
