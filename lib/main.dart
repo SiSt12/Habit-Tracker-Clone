@@ -1,11 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'firebase_options.dart';
+import 'firestore_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   final prefs = await SharedPreferences.getInstance();
+  
+  // Check "Remember Me" logic
+  final rememberMe = prefs.getBool('remember_me') ?? false;
+  if (!rememberMe) {
+    await FirebaseAuth.instance.signOut();
+  }
+
   runApp(HabitApp(prefs: prefs));
 }
 
@@ -92,9 +107,10 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   bool _isLogin = true;
-  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _nameController = TextEditingController();
+  final _usernameController = TextEditingController();
+
+  bool _rememberMe = false;
 
   @override
   void initState() {
@@ -103,75 +119,111 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   void _checkUserLoggedIn() {
-    final currentUser = widget.prefs.getString('currentUser');
-    if (currentUser != null && currentUser.isNotEmpty) {
+    // FirebaseAuth handles persistence automatically.
+    // We just check if there is a current user.
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Navigator.of(context).pushReplacementNamed('/home');
       });
     }
   }
 
-  void _register() {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty || _nameController.text.isEmpty) {
+  Future<void> _register() async {
+    if (_usernameController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Por favor, preencha todos os campos')),
       );
       return;
     }
 
-    final users = widget.prefs.getStringList('users') ?? [];
-    if (users.any((u) => jsonDecode(u)['email'] == _emailController.text)) {
+    if (_passwordController.text.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email já registrado')),
+        const SnackBar(content: Text('A senha deve ter pelo menos 6 caracteres')),
       );
       return;
     }
 
-    final user = {
-      'id': DateTime.now().millisecondsSinceEpoch.toString(),
-      'email': _emailController.text,
-      'password': _passwordController.text,
-      'name': _nameController.text,
-    };
+    try {
+      // Create a dummy email from username (sanitize: lowercase, no spaces)
+      final sanitizedUsername = _usernameController.text.trim().replaceAll(RegExp(r'\s+'), '').toLowerCase();
+      if (sanitizedUsername.isEmpty) {
+         ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nome de usuário inválido')),
+        );
+        return;
+      }
+      final email = '$sanitizedUsername@habit.app';
+      
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: _passwordController.text.trim(),
+      );
+      
+      // Update display name with original text
+      await FirebaseAuth.instance.currentUser?.updateDisplayName(_usernameController.text.trim());
 
-    users.add(jsonEncode(user));
-    widget.prefs.setStringList('users', users);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Registrado com sucesso! Faça login')),
-    );
-
-    setState(() => _isLogin = true);
-    _emailController.clear();
-    _passwordController.clear();
-    _nameController.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Registrado com sucesso!')),
+        );
+        _handleLoginSuccess();
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        String message = 'Erro ao registrar';
+        if (e.code == 'weak-password') {
+          message = 'A senha é muito fraca.';
+        } else if (e.code == 'email-already-in-use') {
+          message = 'Este usuário já existe.';
+        } else {
+          message = 'Erro (${e.code}): ${e.message}';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro inesperado: $e')),
+        );
+      }
+    }
   }
 
-  void _login() {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+  Future<void> _login() async {
+    if (_usernameController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Por favor, preencha todos os campos')),
       );
       return;
     }
 
-    final users = widget.prefs.getStringList('users') ?? [];
-    final user = users.firstWhere(
-      (u) {
-        final userData = jsonDecode(u);
-        return userData['email'] == _emailController.text && userData['password'] == _passwordController.text;
-      },
-      orElse: () => '',
-    );
-
-    if (user.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email ou senha incorretos')),
+    try {
+      final sanitizedUsername = _usernameController.text.trim().replaceAll(RegExp(r'\s+'), '').toLowerCase();
+      final email = '$sanitizedUsername@habit.app';
+      
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: _passwordController.text.trim(),
       );
-      return;
+      
+      if (mounted) {
+        _handleLoginSuccess();
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message ?? 'Erro ao fazer login')),
+        );
+      }
     }
+  }
 
-    widget.prefs.setString('currentUser', user);
+  void _handleLoginSuccess() {
+    // Save "Remember Me" preference
+    widget.prefs.setBool('remember_me', _rememberMe);
     Navigator.of(context).pushReplacementNamed('/home');
   }
 
@@ -188,28 +240,15 @@ class _AuthScreenState extends State<AuthScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Text(
-                    'HabitKit',
+                    'Dinho Tracker',
                     style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.purple),
                   ),
                   const SizedBox(height: 32),
-                  if (!_isLogin)
-                    TextField(
-                      controller: _nameController,
-                      decoration: InputDecoration(
-                        hintText: 'Nome',
-                        filled: true,
-                        fillColor: Colors.grey[800],
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                  if (!_isLogin) const SizedBox(height: 16),
+                  const SizedBox(height: 32),
                   TextField(
-                    controller: _emailController,
+                    controller: _usernameController,
                     decoration: InputDecoration(
-                      hintText: 'Email',
+                      hintText: 'Usuário',
                       filled: true,
                       fillColor: Colors.grey[800],
                       border: OutlineInputBorder(
@@ -231,6 +270,21 @@ class _AuthScreenState extends State<AuthScreen> {
                         borderSide: BorderSide.none,
                       ),
                     ),
+                    ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _rememberMe,
+                        activeColor: Colors.purple,
+                        onChanged: (value) {
+                          setState(() {
+                            _rememberMe = value ?? false;
+                          });
+                        },
+                      ),
+                      const Text('Manter conectado', style: TextStyle(color: Colors.white70)),
+                    ],
                   ),
                   const SizedBox(height: 24),
                   SizedBox(
@@ -269,9 +323,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _usernameController.dispose();
     _passwordController.dispose();
-    _nameController.dispose();
     super.dispose();
   }
 }
@@ -284,47 +337,13 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  late List<Habit> _habits;
-  late SharedPreferences _prefs;
+  late FirestoreService _firestoreService;
+  final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
   @override
   void initState() {
     super.initState();
-    _loadHabits();
-  }
-
-  Future<void> _loadHabits() async {
-    _prefs = await SharedPreferences.getInstance();
-    final habitsJson = _prefs.getStringList('habits_${_getCurrentUserId()}') ?? [];
-    
-    if (habitsJson.isEmpty) {
-      // Dados de exemplo se for primeira vez
-      _habits = [
-        Habit(id: '1', name: 'codecademy20', icon: Icons.school, color: Colors.green, history: [false, false, false, true, false]),
-        Habit(id: '2', name: 'suplementos', icon: Icons.favorite, color: Colors.redAccent, history: [false, false, true, false, false]),
-        Habit(id: '3', name: '3L', icon: Icons.local_drink, color: Colors.blueAccent, history: [false, false, false, true, false]),
-        Habit(id: '4', name: 'Treino', icon: Icons.fitness_center, color: Colors.redAccent, history: [false, true, false, false, false]),
-        Habit(id: '5', name: 'Estudos', icon: Icons.code, color: Colors.cyan, history: [true, false, false, false, false]),
-        Habit(id: '6', name: 'Meditação', icon: Icons.self_improvement, color: Colors.purple, history: [false, false, false, false, false]),
-        Habit(id: '7', name: '10 páginas', icon: Icons.menu_book, color: Colors.green, history: [false, false, false, false, false]),
-        Habit(id: '8', name: 'Alongamento', icon: Icons.accessibility_new, color: Colors.lightGreen, history: [false, false, false, false, false]),
-      ];
-      _saveHabits();
-    } else {
-      _habits = habitsJson.map((h) => Habit.fromJson(jsonDecode(h))).toList();
-    }
-    
-    setState(() {});
-  }
-
-  void _saveHabits() {
-    final habitsJson = _habits.map((h) => jsonEncode(h.toJson())).toList();
-    _prefs.setStringList('habits_${_getCurrentUserId()}', habitsJson);
-  }
-
-  String _getCurrentUserId() {
-    final currentUser = _prefs.getString('currentUser') ?? '{}';
-    return jsonDecode(currentUser)['id'] ?? 'unknown';
+    _firestoreService = FirestoreService(_currentUserId);
   }
 
   @override
@@ -340,7 +359,7 @@ class _HomePageState extends State<HomePage> {
             child: const Icon(Icons.settings),
           ),
         ),
-        title: const Text('HabitKit', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24)),
+        title: const Text('Dinho Tracker', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24)),
         centerTitle: true,
         actions: [
           MouseRegion(
@@ -422,24 +441,42 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildHabitList() {
-    final activeHabits = _habits.where((h) => !h.archived).toList();
-    
-    return ListView.builder(
-      itemCount: activeHabits.length,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      itemBuilder: (context, index) {
-        final habitIndex = _habits.indexWhere((h) => h.id == activeHabits[index].id);
-        return GestureDetector(
-          onTap: () => _showHabitDetailDialog(context, habitIndex),
-          child: HabitListItem(
-            habit: activeHabits[index],
-            onToggle: (dayIndex) {
-              setState(() {
-                _habits[habitIndex].history[dayIndex] = !_habits[habitIndex].history[dayIndex];
-                _saveHabits();
-              });
-            },
-          ),
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _firestoreService.getHabitsStream(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Erro: ${snapshot.error}'));
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final habitsData = snapshot.data ?? [];
+        final activeHabits = habitsData.where((h) => h['archived'] == false).toList();
+
+        if (activeHabits.isEmpty) {
+          return const Center(child: Text('Nenhum hábito ativo'));
+        }
+
+        return ListView.builder(
+          itemCount: activeHabits.length,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          itemBuilder: (context, index) {
+            final data = activeHabits[index];
+            final habit = Habit.fromJson(data);
+            
+            return GestureDetector(
+              onTap: () => _showHabitDetailDialog(context, habit),
+              child: HabitListItem(
+                habit: habit,
+                onToggle: (dayIndex) {
+                  final newHistory = List<bool>.from(habit.history);
+                  newHistory[dayIndex] = !newHistory[dayIndex];
+                  _firestoreService.updateHabitHistory(habit.id, newHistory);
+                },
+              ),
+            );
+          },
         );
       },
     );
@@ -455,16 +492,7 @@ class _HomePageState extends State<HomePage> {
       ),
       builder: (context) => NewHabitScreen(
         onSave: (name, icon, color) {
-          setState(() {
-            _habits.add(Habit(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
-              name: name,
-              icon: icon,
-              color: color,
-              history: [false, false, false, false, false],
-            ));
-            _saveHabits();
-          });
+          _firestoreService.addHabit(name, icon.codePoint, color.value);
           Navigator.pop(context);
         },
       ),
@@ -484,10 +512,12 @@ class _HomePageState extends State<HomePage> {
             child: const Text('Close'),
           ),
           TextButton(
-            onPressed: () {
-              _prefs.remove('currentUser');
-              Navigator.pop(context);
-              Navigator.of(context).pushReplacementNamed('/auth');
+            onPressed: () async {
+              await FirebaseAuth.instance.signOut();
+              if (context.mounted) {
+                Navigator.pop(context);
+                Navigator.of(context).pushReplacementNamed('/auth');
+              }
             },
             child: const Text('Log Out', style: TextStyle(color: Colors.red)),
           ),
@@ -496,7 +526,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _showHabitDetailDialog(BuildContext context, int habitIndex) {
+  void _showHabitDetailDialog(BuildContext context, Habit habit) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -505,28 +535,22 @@ class _HomePageState extends State<HomePage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => HabitDetailScreen(
-        habit: _habits[habitIndex],
+        habit: habit,
         onDelete: () {
-          setState(() {
-            _habits[habitIndex].archived = true;
-            _saveHabits();
-          });
+          _firestoreService.toggleArchive(habit.id, habit.archived);
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Hábito arquivado')),
           );
         },
         onUpdate: () {
-          _saveHabits();
-          setState(() {});
+          // Firestore updates automatically via stream
         },
       ),
     );
   }
 
   void _showArchivedHabits(BuildContext context) {
-    final archivedHabits = _habits.where((h) => h.archived).toList();
-    
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -534,69 +558,76 @@ class _HomePageState extends State<HomePage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Hábitos Arquivados', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: const Icon(Icons.close),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              if (archivedHabits.isEmpty)
-                const Text('Nenhum hábito arquivado')
-              else
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: archivedHabits.length,
-                    itemBuilder: (context, index) {
-                      final habit = archivedHabits[index];
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: habit.color.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(habit.icon, color: habit.color, size: 24),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                habit.name,
-                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  habit.archived = false;
-                                  _saveHabits();
-                                });
-                                setState(() {});
-                              },
-                              child: const Icon(Icons.restore, color: Colors.purple),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+      builder: (context) => StreamBuilder<List<Map<String, dynamic>>>(
+        stream: _firestoreService.getHabitsStream(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          
+          final habitsData = snapshot.data ?? [];
+          final archivedHabits = habitsData
+              .map((h) => Habit.fromJson(h))
+              .where((h) => h.archived)
+              .toList();
+
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Hábitos Arquivados', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: const Icon(Icons.close),
+                    ),
+                  ],
                 ),
-            ],
-          ),
-        ),
+                const SizedBox(height: 20),
+                if (archivedHabits.isEmpty)
+                  const Text('Nenhum hábito arquivado')
+                else
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: archivedHabits.length,
+                      itemBuilder: (context, index) {
+                        final habit = archivedHabits[index];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: habit.color.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(habit.icon, color: habit.color, size: 24),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  habit.name,
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () {
+                                  _firestoreService.toggleArchive(habit.id, true);
+                                },
+                                child: const Icon(Icons.restore, color: Colors.purple),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }
       ),
     );
   }
