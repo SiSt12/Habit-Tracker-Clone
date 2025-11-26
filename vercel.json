@@ -1,0 +1,22 @@
+{
+    "version": 2,
+    "builds": [
+        {
+            "src": "install_flutter.sh",
+            "use": "@vercel/static-build",
+            "config": {
+                "distDir": "build/web"
+            }
+        }
+    ],
+    "routes": [
+        {
+            "src": "/habit/(.*)",
+            "dest": "/$1"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "/index.html"
+        }
+    ]
+}
