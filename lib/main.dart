@@ -1,0 +1,1276 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  runApp(HabitApp(prefs: prefs));
+}
+
+class HabitApp extends StatelessWidget {
+  final SharedPreferences prefs;
+
+  const HabitApp({super.key, required this.prefs});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Habit Tracker',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        primaryColor: Colors.purple,
+        scaffoldBackgroundColor: const Color(0xFF121212),
+        textTheme: const TextTheme(
+          bodyLarge: TextStyle(color: Colors.white),
+          bodyMedium: TextStyle(color: Colors.white70),
+        ),
+      ),
+      routes: {
+        '/auth': (context) => AuthScreen(prefs: prefs),
+        '/home': (context) => const HomePage(),
+      },
+      home: AuthScreen(prefs: prefs),
+    );
+  }
+}
+
+class Habit {
+  String id;
+  String name;
+  IconData icon;
+  Color color;
+  List<bool> history;
+  bool archived;
+  DateTime createdAt;
+
+  Habit({
+    required this.id,
+    required this.name,
+    required this.icon,
+    required this.color,
+    required this.history,
+    this.archived = false,
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'icon': icon.codePoint,
+      'color': color.value,
+      'history': history,
+      'archived': archived,
+      'createdAt': createdAt.toIso8601String(),
+    };
+  }
+
+  factory Habit.fromJson(Map<String, dynamic> json) {
+    return Habit(
+      id: json['id'],
+      name: json['name'],
+      icon: IconData(json['icon'], fontFamily: 'MaterialIcons'),
+      color: Color(json['color']),
+      history: List<bool>.from(json['history']),
+      archived: json['archived'] ?? false,
+      createdAt: DateTime.parse(json['createdAt']),
+    );
+  }
+}
+
+class AuthScreen extends StatefulWidget {
+  final SharedPreferences prefs;
+
+  const AuthScreen({super.key, required this.prefs});
+
+  @override
+  State<AuthScreen> createState() => _AuthScreenState();
+}
+
+class _AuthScreenState extends State<AuthScreen> {
+  bool _isLogin = true;
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _nameController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkUserLoggedIn();
+  }
+
+  void _checkUserLoggedIn() {
+    final currentUser = widget.prefs.getString('currentUser');
+    if (currentUser != null && currentUser.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.of(context).pushReplacementNamed('/home');
+      });
+    }
+  }
+
+  void _register() {
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty || _nameController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor, preencha todos os campos')),
+      );
+      return;
+    }
+
+    final users = widget.prefs.getStringList('users') ?? [];
+    if (users.any((u) => jsonDecode(u)['email'] == _emailController.text)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email já registrado')),
+      );
+      return;
+    }
+
+    final user = {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'email': _emailController.text,
+      'password': _passwordController.text,
+      'name': _nameController.text,
+    };
+
+    users.add(jsonEncode(user));
+    widget.prefs.setStringList('users', users);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Registrado com sucesso! Faça login')),
+    );
+
+    setState(() => _isLogin = true);
+    _emailController.clear();
+    _passwordController.clear();
+    _nameController.clear();
+  }
+
+  void _login() {
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor, preencha todos os campos')),
+      );
+      return;
+    }
+
+    final users = widget.prefs.getStringList('users') ?? [];
+    final user = users.firstWhere(
+      (u) {
+        final userData = jsonDecode(u);
+        return userData['email'] == _emailController.text && userData['password'] == _passwordController.text;
+      },
+      orElse: () => '',
+    );
+
+    if (user.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email ou senha incorretos')),
+      );
+      return;
+    }
+
+    widget.prefs.setString('currentUser', user);
+    Navigator.of(context).pushReplacementNamed('/home');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'HabitKit',
+                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.purple),
+                  ),
+                  const SizedBox(height: 32),
+                  if (!_isLogin)
+                    TextField(
+                      controller: _nameController,
+                      decoration: InputDecoration(
+                        hintText: 'Nome',
+                        filled: true,
+                        fillColor: Colors.grey[800],
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  if (!_isLogin) const SizedBox(height: 16),
+                  TextField(
+                    controller: _emailController,
+                    decoration: InputDecoration(
+                      hintText: 'Email',
+                      filled: true,
+                      fillColor: Colors.grey[800],
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      hintText: 'Senha',
+                      filled: true,
+                      fillColor: Colors.grey[800],
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.purple,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: _isLogin ? _login : _register,
+                      child: Text(
+                        _isLogin ? 'Login' : 'Registrar',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () => setState(() => _isLogin = !_isLogin),
+                    child: Text(
+                      _isLogin ? 'Não tem conta? Registre-se' : 'Já tem conta? Faça login',
+                      style: const TextStyle(color: Colors.purple),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _nameController.dispose();
+    super.dispose();
+  }
+}
+
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  late List<Habit> _habits;
+  late SharedPreferences _prefs;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHabits();
+  }
+
+  Future<void> _loadHabits() async {
+    _prefs = await SharedPreferences.getInstance();
+    final habitsJson = _prefs.getStringList('habits_${_getCurrentUserId()}') ?? [];
+    
+    if (habitsJson.isEmpty) {
+      // Dados de exemplo se for primeira vez
+      _habits = [
+        Habit(id: '1', name: 'codecademy20', icon: Icons.school, color: Colors.green, history: [false, false, false, true, false]),
+        Habit(id: '2', name: 'suplementos', icon: Icons.favorite, color: Colors.redAccent, history: [false, false, true, false, false]),
+        Habit(id: '3', name: '3L', icon: Icons.local_drink, color: Colors.blueAccent, history: [false, false, false, true, false]),
+        Habit(id: '4', name: 'Treino', icon: Icons.fitness_center, color: Colors.redAccent, history: [false, true, false, false, false]),
+        Habit(id: '5', name: 'Estudos', icon: Icons.code, color: Colors.cyan, history: [true, false, false, false, false]),
+        Habit(id: '6', name: 'Meditação', icon: Icons.self_improvement, color: Colors.purple, history: [false, false, false, false, false]),
+        Habit(id: '7', name: '10 páginas', icon: Icons.menu_book, color: Colors.green, history: [false, false, false, false, false]),
+        Habit(id: '8', name: 'Alongamento', icon: Icons.accessibility_new, color: Colors.lightGreen, history: [false, false, false, false, false]),
+      ];
+      _saveHabits();
+    } else {
+      _habits = habitsJson.map((h) => Habit.fromJson(jsonDecode(h))).toList();
+    }
+    
+    setState(() {});
+  }
+
+  void _saveHabits() {
+    final habitsJson = _habits.map((h) => jsonEncode(h.toJson())).toList();
+    _prefs.setStringList('habits_${_getCurrentUserId()}', habitsJson);
+  }
+
+  String _getCurrentUserId() {
+    final currentUser = _prefs.getString('currentUser') ?? '{}';
+    return jsonDecode(currentUser)['id'] ?? 'unknown';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        elevation: 0,
+        leading: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: () => _showSettingsDialog(context),
+            child: const Icon(Icons.settings),
+          ),
+        ),
+        title: const Text('HabitKit', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24)),
+        centerTitle: true,
+        actions: [
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () => _showArchivedHabits(context),
+              child: const Icon(Icons.archive),
+            ),
+          ),
+          const SizedBox(width: 16),
+          _buildAnimatedAddButton(context),
+          const SizedBox(width: 16),
+        ],
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: Column(
+            children: [
+              _buildDateHeader(),
+              Expanded(child: _buildHabitList()),
+            ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: null,
+    );
+  }
+
+  Widget _buildAnimatedAddButton(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () => _showNewHabitDialog(context),
+        child: Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.purple.withOpacity(0.2),
+          ),
+          padding: const EdgeInsets.all(8),
+          child: const Icon(Icons.add, color: Colors.purple),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDateHeader() {
+    final today = DateTime.now();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: List.generate(5, (index) {
+          final day = today.subtract(Duration(days: 4 - index));
+          final isToday = index == 4;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Column(
+              children: [
+                Text(
+                  DateFormat('E').format(day).substring(0, 2),
+                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  DateFormat('d').format(day),
+                  style: TextStyle(
+                    fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                    fontSize: 16,
+                    color: isToday ? Colors.white : Colors.grey[400],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildHabitList() {
+    final activeHabits = _habits.where((h) => !h.archived).toList();
+    
+    return ListView.builder(
+      itemCount: activeHabits.length,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      itemBuilder: (context, index) {
+        final habitIndex = _habits.indexWhere((h) => h.id == activeHabits[index].id);
+        return GestureDetector(
+          onTap: () => _showHabitDetailDialog(context, habitIndex),
+          child: HabitListItem(
+            habit: activeHabits[index],
+            onToggle: (dayIndex) {
+              setState(() {
+                _habits[habitIndex].history[dayIndex] = !_habits[habitIndex].history[dayIndex];
+                _saveHabits();
+              });
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  void _showNewHabitDialog(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF121212),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => NewHabitScreen(
+        onSave: (name, icon, color) {
+          setState(() {
+            _habits.add(Habit(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              name: name,
+              icon: icon,
+              color: color,
+              history: [false, false, false, false, false],
+            ));
+            _saveHabits();
+          });
+          Navigator.pop(context);
+        },
+      ),
+    );
+  }
+
+  void _showSettingsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text('Settings'),
+        content: const Text('Settings menu'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          TextButton(
+            onPressed: () {
+              _prefs.remove('currentUser');
+              Navigator.pop(context);
+              Navigator.of(context).pushReplacementNamed('/auth');
+            },
+            child: const Text('Log Out', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showHabitDetailDialog(BuildContext context, int habitIndex) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF121212),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => HabitDetailScreen(
+        habit: _habits[habitIndex],
+        onDelete: () {
+          setState(() {
+            _habits[habitIndex].archived = true;
+            _saveHabits();
+          });
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Hábito arquivado')),
+          );
+        },
+        onUpdate: () {
+          _saveHabits();
+          setState(() {});
+        },
+      ),
+    );
+  }
+
+  void _showArchivedHabits(BuildContext context) {
+    final archivedHabits = _habits.where((h) => h.archived).toList();
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF121212),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Hábitos Arquivados', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              if (archivedHabits.isEmpty)
+                const Text('Nenhum hábito arquivado')
+              else
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: archivedHabits.length,
+                    itemBuilder: (context, index) {
+                      final habit = archivedHabits[index];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: habit.color.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(habit.icon, color: habit.color, size: 24),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                habit.name,
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  habit.archived = false;
+                                  _saveHabits();
+                                });
+                                setState(() {});
+                              },
+                              child: const Icon(Icons.restore, color: Colors.purple),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class HabitCard extends StatelessWidget {
+  final Habit habit;
+  const HabitCard({super.key, required this.habit});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Colors.grey[900],
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(backgroundColor: habit.color, radius: 16, child: Icon(habit.icon, size: 16, color: Colors.white)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(habit.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+                IconButton(onPressed: () {}, icon: const Icon(Icons.more_vert))
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class HabitListItem extends StatefulWidget {
+  final Habit habit;
+  final Function(int) onToggle;
+
+  const HabitListItem({super.key, required this.habit, required this.onToggle});
+
+  @override
+  State<HabitListItem> createState() => _HabitListItemState();
+}
+
+class _HabitListItemState extends State<HabitListItem> with TickerProviderStateMixin {
+  late List<AnimationController> _controllers;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllers = List.generate(
+      5,
+      (index) => AnimationController(
+        duration: const Duration(milliseconds: 150),
+        vsync: this,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    for (var controller in _controllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  void _toggleDay(int dayIndex) {
+    _controllers[dayIndex].forward().then((_) {
+      _controllers[dayIndex].reverse();
+    });
+    widget.onToggle(dayIndex);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: widget.habit.color.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(widget.habit.icon, color: widget.habit.color, size: 24),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: widget.habit.color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                widget.habit.name,
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          ...List.generate(5, (dayIndex) {
+            final filled = widget.habit.history[dayIndex];
+            return ScaleTransition(
+              scale: Tween<double>(begin: 1.0, end: 1.15).animate(
+                CurvedAnimation(parent: _controllers[dayIndex], curve: Curves.elasticOut),
+              ),
+              child: GestureDetector(
+                onTap: () => _toggleDay(dayIndex),
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    color: filled ? widget.habit.color : Colors.grey[800],
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: filled
+                        ? [
+                            BoxShadow(
+                              color: widget.habit.color.withOpacity(0.5),
+                              blurRadius: 8,
+                              spreadRadius: 1,
+                            )
+                          ]
+                        : null,
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class NewHabitScreen extends StatefulWidget {
+  final Function(String, IconData, Color) onSave;
+
+  const NewHabitScreen({super.key, required this.onSave});
+
+  @override
+  State<NewHabitScreen> createState() => _NewHabitScreenState();
+}
+
+class _NewHabitScreenState extends State<NewHabitScreen> {
+  String _habitName = '';
+  Color _selectedColor = Colors.green;
+  IconData _selectedIcon = Icons.favorite;
+
+  final List<Color> _colors = [
+    Colors.red,
+    Colors.orange,
+    Colors.yellow,
+    Colors.lightGreen,
+    Colors.green,
+    Colors.cyan,
+    Colors.blue,
+    Colors.indigo,
+    Colors.purple,
+    Colors.pink,
+    Colors.grey,
+    Colors.blueGrey,
+  ];
+
+  final List<IconData> _icons = [
+    Icons.calendar_today,
+    Icons.favorite,
+    Icons.fitness_center,
+    Icons.local_drink,
+    Icons.book,
+    Icons.code,
+    Icons.self_improvement,
+    Icons.menu_book,
+    Icons.accessibility_new,
+    Icons.school,
+    Icons.music_note,
+    Icons.camera,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: const Icon(Icons.close),
+                ),
+                const Text('New Habit', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                const SizedBox(width: 24),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: _selectedColor.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Icon(_selectedIcon, color: _selectedColor, size: 50),
+              ),
+            ),
+            const SizedBox(height: 24),
+            TextField(
+              decoration: InputDecoration(
+                hintText: 'Name',
+                filled: true,
+                fillColor: Colors.grey[800],
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onChanged: (value) => setState(() => _habitName = value),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              decoration: InputDecoration(
+                hintText: 'Description',
+                filled: true,
+                fillColor: Colors.grey[800],
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              maxLines: 3,
+            ),
+            const SizedBox(height: 24),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: const Text('Color', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: _colors.map((color) {
+                final isSelected = color == _selectedColor;
+                return MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () => setState(() => _selectedColor = color),
+                    child: Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(12),
+                        border: isSelected ? Border.all(color: Colors.white, width: 3) : null,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 24),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: const Text('Icon', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: _icons.map((icon) {
+                final isSelected = icon == _selectedIcon;
+                return MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () => setState(() => _selectedIcon = icon),
+                    child: Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: isSelected ? Colors.purple.withOpacity(0.3) : Colors.grey[800],
+                        borderRadius: BorderRadius.circular(12),
+                        border: isSelected ? Border.all(color: Colors.purple, width: 2) : null,
+                      ),
+                      child: Center(
+                        child: Icon(icon, color: isSelected ? Colors.purple : Colors.white),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.purple,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () {
+                  if (_habitName.isNotEmpty) {
+                    widget.onSave(_habitName, _selectedIcon, _selectedColor);
+                  }
+                },
+                child: const Text('Save', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class HabitDetailScreen extends StatefulWidget {
+  final Habit habit;
+  final VoidCallback onDelete;
+  final VoidCallback onUpdate;
+
+  const HabitDetailScreen({
+    super.key,
+    required this.habit,
+    required this.onDelete,
+    required this.onUpdate,
+  });
+
+  @override
+  State<HabitDetailScreen> createState() => _HabitDetailScreenState();
+}
+
+class _HabitDetailScreenState extends State<HabitDetailScreen> {
+  late String _habitName;
+  late Color _selectedColor;
+  late IconData _selectedIcon;
+  late DateTime _calendarMonth;
+
+  final List<Color> _colors = [
+    Colors.red,
+    Colors.orange,
+    Colors.yellow,
+    Colors.lightGreen,
+    Colors.green,
+    Colors.cyan,
+    Colors.blue,
+    Colors.indigo,
+    Colors.purple,
+    Colors.pink,
+    Colors.grey,
+    Colors.blueGrey,
+  ];
+
+  final List<IconData> _icons = [
+    Icons.calendar_today,
+    Icons.favorite,
+    Icons.fitness_center,
+    Icons.local_drink,
+    Icons.book,
+    Icons.code,
+    Icons.self_improvement,
+    Icons.menu_book,
+    Icons.accessibility_new,
+    Icons.school,
+    Icons.music_note,
+    Icons.camera,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _habitName = widget.habit.name;
+    _selectedColor = widget.habit.color;
+    _selectedIcon = widget.habit.icon;
+    _calendarMonth = DateTime.now();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: const Icon(Icons.close),
+                  ),
+                ),
+                const Text('Habit Details', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                GestureDetector(
+                  onTap: _showDeleteConfirm,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: const Icon(Icons.delete, color: Colors.red),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: _selectedColor.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Icon(_selectedIcon, color: _selectedColor, size: 50),
+              ),
+            ),
+            const SizedBox(height: 24),
+            TextField(
+              decoration: InputDecoration(
+                hintText: 'Name',
+                filled: true,
+                fillColor: Colors.grey[800],
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              controller: TextEditingController(text: _habitName),
+              onChanged: (value) {
+                _habitName = value;
+                widget.habit.name = value;
+              },
+            ),
+            const SizedBox(height: 24),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: const Text('Calendar', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            ),
+            const SizedBox(height: 16),
+            _buildHabitCalendar(),
+            const SizedBox(height: 24),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: const Text('Color', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: _colors.map((color) {
+                final isSelected = color == _selectedColor;
+                return MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedColor = color;
+                        widget.habit.color = color;
+                      });
+                      widget.onUpdate();
+                    },
+                    child: Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(12),
+                        border: isSelected ? Border.all(color: Colors.white, width: 3) : null,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 24),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: const Text('Icon', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: _icons.map((icon) {
+                final isSelected = icon == _selectedIcon;
+                return MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedIcon = icon;
+                        widget.habit.icon = icon;
+                      });
+                      widget.onUpdate();
+                    },
+                    child: Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: isSelected ? Colors.purple.withOpacity(0.3) : Colors.grey[800],
+                        borderRadius: BorderRadius.circular(12),
+                        border: isSelected ? Border.all(color: Colors.purple, width: 2) : null,
+                      ),
+                      child: Center(
+                        child: Icon(icon, color: isSelected ? Colors.purple : Colors.white),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.purple,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () {
+                  widget.onUpdate();
+                  Navigator.pop(context);
+                },
+                child: const Text('Update', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHabitCalendar() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: () => setState(() => _calendarMonth = DateTime(_calendarMonth.year, _calendarMonth.month - 1)),
+                  child: const Icon(Icons.chevron_left),
+                ),
+              ),
+              Text(
+                DateFormat('MMMM yyyy').format(_calendarMonth),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: () => setState(() => _calendarMonth = DateTime(_calendarMonth.year, _calendarMonth.month + 1)),
+                  child: const Icon(Icons.chevron_right),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildCalendarGrid(_calendarMonth),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCalendarGrid(DateTime month) {
+    final firstDay = DateTime(month.year, month.month, 1);
+    final lastDay = DateTime(month.year, month.month + 1, 0);
+    final today = DateTime.now();
+
+    const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final firstDayWeekday = firstDay.weekday;
+    
+    List<Widget> dayWidgets = [];
+
+    // Adicionar headers dos dias da semana
+    for (var day in weekDays) {
+      dayWidgets.add(
+        Center(
+          child: Text(
+            day,
+            style: TextStyle(color: Colors.grey[500], fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ),
+      );
+    }
+
+    // Dias vazios antes do primeiro dia
+    for (int i = 0; i < firstDayWeekday - 1; i++) {
+      dayWidgets.add(const SizedBox());
+    }
+
+    // Dias do mês
+    for (int i = 1; i <= lastDay.day; i++) {
+      final date = DateTime(month.year, month.month, i);
+      final daysAgo = today.difference(date).inDays;
+      final isCompleted = daysAgo >= 0 && daysAgo < widget.habit.history.length && widget.habit.history[daysAgo];
+      final isToday = date.year == today.year && date.month == today.month && date.day == today.day;
+
+      dayWidgets.add(
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: isCompleted ? widget.habit.color : (isToday ? Colors.grey[700] : Colors.grey[800]),
+            borderRadius: BorderRadius.circular(6),
+            border: isToday ? Border.all(color: Colors.grey[500]!, width: 2) : null,
+          ),
+          child: Center(
+            child: Text(
+              '$i',
+              style: TextStyle(fontSize: 12, color: isCompleted ? Colors.black : Colors.white),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return GridView.count(
+      crossAxisCount: 7,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisSpacing: 6,
+      mainAxisSpacing: 6,
+      childAspectRatio: 1.0,
+      children: dayWidgets,
+    );
+  }
+
+  void _showDeleteConfirm() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text('Delete Habit?'),
+        content: const Text('This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              widget.onDelete();
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+}
