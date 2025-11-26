@@ -1,16 +1,43 @@
-# habit_tracker
+# Habit Tracker
 
-A new Flutter project.
+A full-stack habit tracking application built with **NestJS** and **Next.js**.
+
+## Architecture
+
+-   **Backend**: NestJS (Node.js framework)
+    -   REST API
+    -   SQLite Database
+    -   TypeORM
+-   **Frontend**: Next.js (React framework)
+    -   Tailwind CSS
+    -   Lucide Icons
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+### Prerequisites
+-   Node.js (v18+)
+-   npm
 
-A few resources to get you started if this is your first Flutter project:
+### Installation
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+1.  **Backend Setup**
+    ```bash
+    cd backend
+    npm install
+    npm run start:dev
+    ```
+    The API will run on `http://localhost:3000`.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+2.  **Frontend Setup**
+    ```bash
+    cd frontend
+    npm install
+    npm run dev
+    ```
+    The application will run on `http://localhost:3001`.
+
+## Features
+-   Create new habits with custom icons and colors.
+-   Track daily progress.
+-   Archive and restore habits.
+-   Delete habits.
