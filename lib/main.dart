@@ -679,78 +679,70 @@ class _HabitListItemState extends State<HabitListItem> with TickerProviderStateM
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.grey[900],
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: widget.habit.color.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(widget.habit.icon, color: widget.habit.color, size: 24),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    widget.habit.name,
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+      child: Row(
+        children: [
+          // Icon
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: widget.habit.color.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
             ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: List.generate(5, (dayIndex) {
-                final filled = widget.habit.history.length > dayIndex ? widget.habit.history[dayIndex] : false;
-                return ScaleTransition(
-                  scale: Tween<double>(begin: 1.0, end: 1.15).animate(
-                    CurvedAnimation(parent: _controllers[dayIndex], curve: Curves.elasticOut),
-                  ),
-                  child: GestureDetector(
-                    onTap: () => _toggleDay(dayIndex),
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: filled ? widget.habit.color : Colors.grey[800],
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: filled
-                            ? [
-                                BoxShadow(
-                                  color: widget.habit.color.withOpacity(0.5),
-                                  blurRadius: 8,
-                                  spreadRadius: 1,
-                                )
-                              ]
-                            : null,
-                      ),
-                      child: Center(
-                        child: Text(
-                          DateFormat('E').format(DateTime.now().subtract(Duration(days: 4 - dayIndex))).substring(0, 1),
-                          style: TextStyle(
-                            color: filled ? Colors.black : Colors.grey[400],
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
+            child: Icon(widget.habit.icon, color: widget.habit.color, size: 24),
+          ),
+          const SizedBox(width: 12),
+          
+          // Name
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: widget.habit.color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                widget.habit.name,
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          
+          // Days
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: List.generate(5, (dayIndex) {
+              final filled = widget.habit.history.length > dayIndex ? widget.habit.history[dayIndex] : false;
+              return ScaleTransition(
+                scale: Tween<double>(begin: 1.0, end: 1.15).animate(
+                  CurvedAnimation(parent: _controllers[dayIndex], curve: Curves.elasticOut),
+                ),
+                child: GestureDetector(
+                  onTap: () => _toggleDay(dayIndex),
+                  child: Container(
+                    width: 28, // Smaller width
+                    height: 28, // Smaller height
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: filled ? widget.habit.color : Colors.grey[800],
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: filled
+                          ? [
+                              BoxShadow(
+                                color: widget.habit.color.withOpacity(0.5),
+                                blurRadius: 4,
+                                spreadRadius: 1,
+                              )
+                            ]
+                          : null,
                     ),
                   ),
-                );
-              }),
-            ),
-          ],
-        ),
+                ),
+              );
+            }),
+          ),
+        ],
       ),
     );
   }
