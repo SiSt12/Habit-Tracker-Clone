@@ -28,14 +28,14 @@ class FirestoreService {
       'name': name,
       'icon': iconCode,
       'color': colorValue,
-      'history': [false, false, false, false, false], // Initial 5 days
+      'history': {}, // Initial empty history
       'archived': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
   // Update Habit History
-  Future<void> updateHabitHistory(String habitId, List<bool> history) async {
+  Future<void> updateHabitHistory(String habitId, Map<String, bool> history) async {
     await _habitsCollection.doc(habitId).update({
       'history': history,
     });

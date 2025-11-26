@@ -6,7 +6,7 @@ class Habit {
   String name;
   IconData icon;
   Color color;
-  List<bool> history;
+  Map<String, bool> history;
   bool archived;
   DateTime createdAt;
 
@@ -52,14 +52,20 @@ class Habit {
     );
   }
 
-  static List<bool> _parseHistory(dynamic historyJson) {
-    if (historyJson == null || historyJson is! List) {
-      return List.filled(5, false);
+  static Map<String, bool> _parseHistory(dynamic historyJson) {
+    if (historyJson == null) {
+      return {};
     }
-    final list = historyJson.map((e) => e as bool).toList();
-    if (list.length < 5) {
-      return [...list, ...List.filled(5 - list.length, false)];
+    if (historyJson is Map) {
+      return Map<String, bool>.from(historyJson);
     }
-    return list;
+    // Backward compatibility for List<bool>
+    // We can't easily map old list to dates without knowing when they were checked.
+    // We will just discard them or map them to "unknown" dates if critical, 
+    // but for now, returning empty map is safer than guessing dates.
+    // Alternatively, we could map the last 5 days to these values if we assume they are [today, yesterday, ...].
+    // Let's assume the list was [day-4, day-3, day-2, yesterday, today] as per previous UI logic?
+    // Actually previous UI logic was just 5 boxes. Let's start fresh to avoid confusion.
+    return {}; 
   }
 }

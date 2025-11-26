@@ -298,10 +298,26 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   late FirestoreService _firestoreService;
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+  
+  // Calculate last 5 days (including today)
+  List<DateTime> get _last5Days {
+    final today = DateTime.now();
+    return List.generate(5, (index) {
+      final date = today.subtract(Duration(days: 4 - index));
+      // Strip time part for consistent comparison
+      return DateTime(date.year, date.month, date.day);
+    });
+  }
 
   @override
   void initState() {
     super.initState();
+    if (_currentUserId.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.of(context).pushReplacementNamed('/auth');
+      });
+      return;
+    }
     _firestoreService = FirestoreService(_currentUserId);
   }
 
@@ -366,14 +382,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildDateHeader() {
+    final days = _last5Days;
     final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
-        children: List.generate(5, (index) {
-          final day = today.subtract(Duration(days: 4 - index));
-          final isToday = index == 4;
+        children: days.map((day) {
+          final isToday = day.isAtSameMomentAs(todayDate);
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Column(
@@ -429,9 +447,11 @@ class _HomePageState extends State<HomePage> {
                 onTap: () => _showHabitDetailDialog(context, habit),
                 child: HabitListItem(
                   habit: habit,
-                  onToggle: (dayIndex) {
-                    final newHistory = List<bool>.from(habit.history);
-                    newHistory[dayIndex] = !newHistory[dayIndex];
+                  days: _last5Days,
+                  onToggle: (dateKey) {
+                    final newHistory = Map<String, bool>.from(habit.history);
+                    // Toggle the status for the given date key
+                    newHistory[dateKey] = !(newHistory[dateKey] ?? false);
                     _firestoreService.updateHabitHistory(habit.id, newHistory);
                   },
                 ),
@@ -637,9 +657,10 @@ class HabitCard extends StatelessWidget {
 
 class HabitListItem extends StatefulWidget {
   final Habit habit;
-  final Function(int) onToggle;
+  final List<DateTime> days;
+  final Function(String) onToggle;
 
-  const HabitListItem({super.key, required this.habit, required this.onToggle});
+  const HabitListItem({super.key, required this.habit, required this.days, required this.onToggle});
 
   @override
   State<HabitListItem> createState() => _HabitListItemState();
@@ -668,11 +689,12 @@ class _HabitListItemState extends State<HabitListItem> with TickerProviderStateM
     super.dispose();
   }
 
-  void _toggleDay(int dayIndex) {
-    _controllers[dayIndex].forward().then((_) {
-      _controllers[dayIndex].reverse();
+  void _toggleDay(int index, DateTime date) {
+    _controllers[index].forward().then((_) {
+      _controllers[index].reverse();
     });
-    widget.onToggle(dayIndex);
+    final dateKey = DateFormat('yyyy-MM-dd').format(date);
+    widget.onToggle(dateKey);
   }
 
   @override
@@ -712,14 +734,17 @@ class _HabitListItemState extends State<HabitListItem> with TickerProviderStateM
           // Days
           Row(
             mainAxisSize: MainAxisSize.min,
-            children: List.generate(5, (dayIndex) {
-              final filled = widget.habit.history.length > dayIndex ? widget.habit.history[dayIndex] : false;
+            children: List.generate(widget.days.length, (index) {
+              final date = widget.days[index];
+              final dateKey = DateFormat('yyyy-MM-dd').format(date);
+              final filled = widget.habit.history[dateKey] ?? false;
+              
               return ScaleTransition(
                 scale: Tween<double>(begin: 1.0, end: 1.15).animate(
-                  CurvedAnimation(parent: _controllers[dayIndex], curve: Curves.elasticOut),
+                  CurvedAnimation(parent: _controllers[index], curve: Curves.elasticOut),
                 ),
                 child: GestureDetector(
-                  onTap: () => _toggleDay(dayIndex),
+                  onTap: () => _toggleDay(index, date),
                   child: Container(
                     width: 28, // Smaller width
                     height: 28, // Smaller height

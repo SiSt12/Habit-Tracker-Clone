@@ -5,13 +5,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 void main() {
   group('Habit Model Tests', () {
-    test('should create Habit from valid JSON', () {
+    test('should create Habit from valid JSON with Map history', () {
       final json = {
         'id': '123',
         'name': 'Test Habit',
         'icon': 58848, // Icons.favorite
         'color': 4294198070, // Colors.red
-        'history': [true, false, true, false, true],
+        'history': {'2023-11-26': true, '2023-11-25': false},
         'archived': false,
         'createdAt': DateTime.now().toIso8601String(),
       };
@@ -20,11 +20,12 @@ void main() {
 
       expect(habit.id, '123');
       expect(habit.name, 'Test Habit');
-      expect(habit.history.length, 5);
-      expect(habit.history[0], true);
+      expect(habit.history.length, 2);
+      expect(habit.history['2023-11-26'], true);
+      expect(habit.history['2023-11-25'], false);
     });
 
-    test('should handle null history by creating default list', () {
+    test('should handle null history by creating empty map', () {
       final json = {
         'id': '123',
         'name': 'Test Habit',
@@ -37,26 +38,23 @@ void main() {
 
       final habit = Habit.fromJson(json);
 
-      expect(habit.history.length, 5);
-      expect(habit.history.every((e) => e == false), true);
+      expect(habit.history, isEmpty);
     });
 
-    test('should pad short history list', () {
+    test('should handle legacy List history by returning empty map', () {
       final json = {
         'id': '123',
         'name': 'Test Habit',
         'icon': 58848,
         'color': 4294198070,
-        'history': [true], // Only 1 day
+        'history': [true, false, true], // Old List format
         'archived': false,
         'createdAt': DateTime.now().toIso8601String(),
       };
 
       final habit = Habit.fromJson(json);
 
-      expect(habit.history.length, 5);
-      expect(habit.history[0], true);
-      expect(habit.history[1], false); // Padded
+      expect(habit.history, isEmpty);
     });
 
     test('should handle Firestore Timestamp', () {
@@ -66,7 +64,7 @@ void main() {
         'name': 'Test Habit',
         'icon': 58848,
         'color': 4294198070,
-        'history': [],
+        'history': {},
         'archived': false,
         'createdAt': Timestamp.fromDate(now), // Firestore type
       };
@@ -80,7 +78,7 @@ void main() {
     test('should handle missing or null fields with defaults', () {
       final json = {
         // Missing id, name, icon, color, createdAt
-        'history': [],
+        'history': {},
         'archived': null,
       };
 
@@ -90,7 +88,7 @@ void main() {
       expect(habit.name, 'Unnamed Habit');
       expect(habit.icon, Icons.error);
       expect(habit.color, Colors.grey);
-      expect(habit.history.length, 5);
+      expect(habit.history, isEmpty);
       expect(habit.createdAt, isNotNull);
     });
   });
