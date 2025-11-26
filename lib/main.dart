@@ -421,20 +421,30 @@ class _HomePageState extends State<HomePage> {
           itemCount: activeHabits.length,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           itemBuilder: (context, index) {
-            final data = activeHabits[index];
-            final habit = Habit.fromJson(data);
-            
-            return GestureDetector(
-              onTap: () => _showHabitDetailDialog(context, habit),
-              child: HabitListItem(
-                habit: habit,
-                onToggle: (dayIndex) {
-                  final newHistory = List<bool>.from(habit.history);
-                  newHistory[dayIndex] = !newHistory[dayIndex];
-                  _firestoreService.updateHabitHistory(habit.id, newHistory);
-                },
-              ),
-            );
+            try {
+              final data = activeHabits[index];
+              final habit = Habit.fromJson(data);
+              
+              return GestureDetector(
+                onTap: () => _showHabitDetailDialog(context, habit),
+                child: HabitListItem(
+                  habit: habit,
+                  onToggle: (dayIndex) {
+                    final newHistory = List<bool>.from(habit.history);
+                    newHistory[dayIndex] = !newHistory[dayIndex];
+                    _firestoreService.updateHabitHistory(habit.id, newHistory);
+                  },
+                ),
+              );
+            } catch (e) {
+              return Card(
+                color: Colors.red.withOpacity(0.2),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text('Erro ao carregar hábito: $e', style: const TextStyle(color: Colors.red)),
+                ),
+              );
+            }
           },
         );
       },

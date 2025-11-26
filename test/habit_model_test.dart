@@ -76,5 +76,22 @@ void main() {
       expect(habit.createdAt.year, now.year);
       expect(habit.createdAt.month, now.month);
     });
+
+    test('should handle missing or null fields with defaults', () {
+      final json = {
+        // Missing id, name, icon, color, createdAt
+        'history': [],
+        'archived': null,
+      };
+
+      final habit = Habit.fromJson(json);
+
+      expect(habit.id, 'unknown');
+      expect(habit.name, 'Unnamed Habit');
+      expect(habit.icon, Icons.error);
+      expect(habit.color, Colors.grey);
+      expect(habit.history.length, 5);
+      expect(habit.createdAt, isNotNull);
+    });
   });
 }

@@ -34,15 +34,21 @@ class Habit {
 
   factory Habit.fromJson(Map<String, dynamic> json) {
     return Habit(
-      id: json['id'],
-      name: json['name'],
-      icon: IconData(json['icon'], fontFamily: 'MaterialIcons'),
-      color: Color(json['color']),
+      id: json['id'] ?? 'unknown',
+      name: json['name'] ?? 'Unnamed Habit',
+      icon: json['icon'] != null 
+          ? IconData(json['icon'], fontFamily: 'MaterialIcons') 
+          : Icons.error,
+      color: json['color'] != null 
+          ? Color(json['color']) 
+          : Colors.grey,
       history: _parseHistory(json['history']),
       archived: json['archived'] ?? false,
       createdAt: json['createdAt'] is Timestamp 
           ? (json['createdAt'] as Timestamp).toDate() 
-          : DateTime.parse(json['createdAt'].toString()),
+          : (json['createdAt'] != null 
+              ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
+              : DateTime.now()),
     );
   }
 
