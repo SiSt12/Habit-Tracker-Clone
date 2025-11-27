@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plus, Settings, Trophy, BarChart3, User } from 'lucide-react';
+import { Plus, Settings, Archive, LogOut } from 'lucide-react';
 import { api } from '@/lib/api';
 import { HabitCard } from '@/components/HabitCard';
 import { AddHabitModal } from '@/components/AddHabitModal';
+import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 interface Habit {
@@ -20,6 +22,9 @@ export default function Home() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const router = useRouter();
 
   const fetchHabits = async () => {
     try {
@@ -34,28 +39,56 @@ export default function Home() {
   };
 
   useEffect(() => {
-    fetchHabits();
-  }, []);
+    // Check authentication status
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        router.push('/login');
+        return;
+      }
+
+      setIsAuthenticated(true);
+      fetchHabits();
+    };
+
+    checkAuth();
+  }, [router]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-white p-4 md:p-8 font-sans">
       <div className="max-w-2xl mx-auto">
         <header className="flex justify-between items-center mb-10 pt-4">
           <div className="flex items-center gap-2">
-            <div className="p-2 bg-zinc-900 rounded-lg">
-              <Settings size={20} className="text-zinc-400" />
+            <div className="relative">
+              <button
+                onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+                className="p-2 bg-zinc-900 rounded-lg hover:bg-zinc-800 transition-colors"
+              >
+                <Settings size={20} className="text-zinc-400" />
+              </button>
+              {showSettingsMenu && (
+                <div className="absolute top-12 left-0 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl z-50 min-w-[150px]">
+                  <button
+                    onClick={handleLogout}
+                    className="w-full px-4 py-2 text-left text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors flex items-center gap-2 rounded-lg"
+                  >
+                    <LogOut size={16} />
+                    Logout
+                  </button>
+                </div>
+              )}
             </div>
             <h1 className="text-2xl font-bold tracking-tight">Dinho Tracker</h1>
           </div>
           <div className="flex gap-3">
-            <div className="p-2 bg-zinc-900 rounded-lg">
-              <Trophy size={20} className="text-zinc-400" />
-            </div>
-            <div className="p-2 bg-zinc-900 rounded-lg">
-              <BarChart3 size={20} className="text-zinc-400" />
-            </div>
-            <Link href="/login" className="p-2 bg-zinc-900 rounded-lg text-zinc-400 hover:text-white transition-colors">
-              <User size={20} />
+            <Link href="/archive" className="p-2 bg-zinc-900 rounded-lg text-zinc-400 hover:text-white transition-colors">
+              <Archive size={20} />
             </Link>
             <button
               onClick={() => setIsModalOpen(true)}

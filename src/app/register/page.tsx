@@ -6,8 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 export default function RegisterPage() {
-    const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
+    const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const router = useRouter();
@@ -17,22 +16,33 @@ export default function RegisterPage() {
         setLoading(true);
 
         try {
+            // Convert username to email format for Supabase
+            const email = `${username}@habit.local`;
+
             const { data, error } = await supabase.auth.signUp({
                 email,
                 password,
                 options: {
                     data: {
-                        full_name: name,
+                        username: username,
                     },
+                    emailRedirectTo: undefined, // Disable email verification
                 },
             });
 
             if (error) throw error;
 
-            alert('Registration successful! Please check your email to verify your account.');
-            router.push('/login');
+            // Auto-login after registration
+            const { error: loginError } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
+
+            if (loginError) throw loginError;
+
+            router.push('/');
         } catch (error: any) {
-            alert(error.message);
+            alert(error.message || 'Registration failed');
         } finally {
             setLoading(false);
         }
@@ -48,25 +58,13 @@ export default function RegisterPage() {
 
                 <form onSubmit={handleRegister} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-1">Name</label>
+                        <label className="block text-sm font-medium text-zinc-400 mb-1">Username</label>
                         <input
                             type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
                             className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                            placeholder="John Doe"
-                            required
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-1">Email</label>
-                        <input
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                            placeholder="you@example.com"
+                            placeholder="your_username"
                             required
                         />
                     </div>
@@ -80,6 +78,7 @@ export default function RegisterPage() {
                             className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                             placeholder="••••••••"
                             required
+                            minLength={6}
                         />
                     </div>
 
@@ -88,7 +87,7 @@ export default function RegisterPage() {
                         disabled={loading}
                         className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-50"
                     >
-                        {loading ? 'Create Account' : 'Sign Up'}
+                        {loading ? 'Creating Account...' : 'Sign Up'}
                     </button>
                 </form>
 

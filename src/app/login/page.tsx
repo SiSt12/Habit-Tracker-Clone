@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 export default function LoginPage() {
-    const [email, setEmail] = useState('');
+    const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const router = useRouter();
@@ -16,6 +16,9 @@ export default function LoginPage() {
         setLoading(true);
 
         try {
+            // Convert username to email format for Supabase
+            const email = `${username}@habit.local`;
+
             const { data, error } = await supabase.auth.signInWithPassword({
                 email,
                 password,
@@ -25,7 +28,7 @@ export default function LoginPage() {
 
             router.push('/');
         } catch (error: any) {
-            alert(error.message);
+            alert(error.message || 'Login failed');
         } finally {
             setLoading(false);
         }
@@ -41,13 +44,13 @@ export default function LoginPage() {
 
                 <form onSubmit={handleLogin} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-1">Email</label>
+                        <label className="block text-sm font-medium text-zinc-400 mb-1">Username</label>
                         <input
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            type="text"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
                             className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                            placeholder="you@example.com"
+                            placeholder="your_username"
                             required
                         />
                     </div>
