@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 export default function RegisterPage() {
     const [name, setName] = useState('');
@@ -14,11 +15,27 @@ export default function RegisterPage() {
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        // TODO: Implement actual cloud auth here
-        setTimeout(() => {
+
+        try {
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                    data: {
+                        full_name: name,
+                    },
+                },
+            });
+
+            if (error) throw error;
+
+            alert('Registration successful! Please check your email to verify your account.');
+            router.push('/login');
+        } catch (error: any) {
+            alert(error.message);
+        } finally {
             setLoading(false);
-            router.push('/');
-        }, 1000);
+        }
     };
 
     return (

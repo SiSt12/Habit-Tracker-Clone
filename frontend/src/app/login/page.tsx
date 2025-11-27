@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
@@ -13,11 +14,21 @@ export default function LoginPage() {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        // TODO: Implement actual cloud auth here (Firebase/Supabase)
-        setTimeout(() => {
-            setLoading(false);
+
+        try {
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
+
+            if (error) throw error;
+
             router.push('/');
-        }, 1000);
+        } catch (error: any) {
+            alert(error.message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (

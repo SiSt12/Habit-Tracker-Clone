@@ -20,6 +20,9 @@ export class Habit {
     @Column({ default: false })
     archived: boolean;
 
+    @Column()
+    userId: string;
+
     @CreateDateColumn()
     createdAt: Date;
 }
