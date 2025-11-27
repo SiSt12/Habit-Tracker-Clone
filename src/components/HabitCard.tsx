@@ -24,19 +24,28 @@ interface HabitCardProps {
 export function HabitCard({ habit, onUpdate }: HabitCardProps) {
     const [loading, setLoading] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [optimisticHistory, setOptimisticHistory] = useState<Record<string, boolean>>(habit.history);
 
     const toggleHistory = async (date: Date, e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent opening edit modal
         if (loading) return;
-        setLoading(true);
+
         const dateStr = format(date, 'yyyy-MM-dd');
-        const newHistory = { ...habit.history, [dateStr]: !habit.history[dateStr] };
+        const newValue = !optimisticHistory[dateStr];
+
+        // Optimistic update - change UI immediately
+        setOptimisticHistory(prev => ({ ...prev, [dateStr]: newValue }));
+        setLoading(true);
+
+        const newHistory = { ...habit.history, [dateStr]: newValue };
 
         try {
             await api.patch(`/habits/${habit.id}/history`, { history: newHistory });
             onUpdate();
         } catch (error) {
             console.error('Failed to update history', error);
+            // Rollback on error
+            setOptimisticHistory(habit.history);
         } finally {
             setLoading(false);
         }
@@ -69,7 +78,7 @@ export function HabitCard({ habit, onUpdate }: HabitCardProps) {
                 <div className="flex gap-2">
                     {last5Days.map((date) => {
                         const dateStr = format(date, 'yyyy-MM-dd');
-                        const isCompleted = habit.history[dateStr];
+                        const isCompleted = optimisticHistory[dateStr];
 
                         return (
                             <button
