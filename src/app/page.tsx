@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Plus, Settings, Archive, LogOut } from 'lucide-react';
 import { api } from '@/lib/api';
 import { HabitCard } from '@/components/HabitCard';
@@ -8,15 +8,7 @@ import { AddHabitModal } from '@/components/AddHabitModal';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-
-interface Habit {
-  id: string;
-  name: string;
-  icon: string;
-  color: number;
-  history: Record<string, boolean>;
-  archived: boolean;
-}
+import type { Habit } from '@/types';
 
 export default function Home() {
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -25,8 +17,9 @@ export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const router = useRouter();
+  const settingsMenuRef = useRef<HTMLDivElement>(null);
 
-  const fetchHabits = async () => {
+  const fetchHabits = useCallback(async () => {
     try {
       const response = await api.get<Habit[]>('/habits');
       // Filter out archived habits
@@ -36,7 +29,16 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  }, [router]);
+
+  const openModal = useCallback(() => setIsModalOpen(true), []);
+  const closeModal = useCallback(() => setIsModalOpen(false), []);
+  const toggleSettingsMenu = useCallback(() => setShowSettingsMenu(prev => !prev), []);
 
   useEffect(() => {
     // Check authentication status
@@ -53,21 +55,30 @@ export default function Home() {
     };
 
     checkAuth();
-  }, [router]);
+  }, [router, fetchHabits]);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
-  };
+  // Close settings menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target as Node)) {
+        setShowSettingsMenu(false);
+      }
+    };
+
+    if (showSettingsMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showSettingsMenu]);
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-white p-4 md:p-8 font-sans">
       <div className="max-w-2xl mx-auto">
         <header className="flex justify-between items-center mb-10 pt-4">
           <div className="flex items-center gap-2">
-            <div className="relative">
+            <div className="relative" ref={settingsMenuRef}>
               <button
-                onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+                onClick={toggleSettingsMenu}
                 className="p-2 bg-zinc-900 rounded-lg hover:bg-zinc-800 transition-colors"
               >
                 <Settings size={20} className="text-zinc-400" />
@@ -91,7 +102,7 @@ export default function Home() {
               <Archive size={20} />
             </Link>
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={openModal}
               className="p-2 bg-white text-black rounded-full hover:bg-gray-200 transition-colors"
             >
               <Plus size={24} />
@@ -128,7 +139,7 @@ export default function Home() {
             <h3 className="text-xl font-semibold mb-2">No habits yet</h3>
             <p className="text-zinc-400 mb-6">Start your journey by creating your first habit.</p>
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={openModal}
               className="px-6 py-2 bg-white text-black font-semibold rounded-lg hover:bg-gray-200 transition-colors"
             >
               Create Habit
@@ -144,7 +155,7 @@ export default function Home() {
 
         <AddHabitModal
           isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
+          onClose={closeModal}
           onAdded={fetchHabits}
         />
       </div>

@@ -1,32 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback, memo } from 'react';
 import { format, subDays } from 'date-fns';
 import * as Icons from 'lucide-react';
 import { api } from '@/lib/api';
-import { twMerge } from 'tailwind-merge';
+import { cn, colorToHex } from '@/lib/utils';
 import { EditHabitModal } from './EditHabitModal';
-
-interface Habit {
-    id: string;
-    name: string;
-    icon: string;
-    color: number;
-    history: Record<string, boolean>;
-    archived: boolean;
-}
+import type { Habit } from '@/types';
 
 interface HabitCardProps {
     habit: Habit;
     onUpdate: () => void;
 }
 
-export function HabitCard({ habit, onUpdate }: HabitCardProps) {
+function HabitCardComponent({ habit, onUpdate }: HabitCardProps) {
     const [loading, setLoading] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [optimisticHistory, setOptimisticHistory] = useState<Record<string, boolean>>(habit.history);
 
-    const toggleHistory = async (date: Date, e: React.MouseEvent) => {
+    const toggleHistory = useCallback(async (date: Date, e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent opening edit modal
         if (loading) return;
 
@@ -49,18 +41,26 @@ export function HabitCard({ habit, onUpdate }: HabitCardProps) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [loading, optimisticHistory, habit.history, habit.id, onUpdate]);
+
+    const openEditModal = useCallback(() => {
+        setIsEditModalOpen(true);
+    }, []);
+
+    const closeEditModal = useCallback(() => {
+        setIsEditModalOpen(false);
+    }, []);
 
     const last5Days = Array.from({ length: 5 }).map((_, i) => subDays(new Date(), 4 - i));
 
     // @ts-ignore
     const IconComponent = Icons[habit.icon] || Icons.Activity;
-    const colorHex = Color(habit.color);
+    const colorHex = colorToHex(habit.color);
 
     return (
         <>
             <div
-                onClick={() => setIsEditModalOpen(true)}
+                onClick={openEditModal}
                 className="bg-zinc-900 rounded-2xl p-4 flex items-center justify-between group cursor-pointer hover:bg-zinc-800/80 transition-colors"
             >
                 {/* Left Side: Icon and Name */}
@@ -84,7 +84,7 @@ export function HabitCard({ habit, onUpdate }: HabitCardProps) {
                             <button
                                 key={dateStr}
                                 onClick={(e) => toggleHistory(date, e)}
-                                className={twMerge(
+                                className={cn(
                                     "w-8 h-8 rounded-lg transition-all duration-200",
                                     isCompleted
                                         ? "opacity-100"
@@ -101,14 +101,12 @@ export function HabitCard({ habit, onUpdate }: HabitCardProps) {
             <EditHabitModal
                 habit={habit}
                 isOpen={isEditModalOpen}
-                onClose={() => setIsEditModalOpen(false)}
+                onClose={closeEditModal}
                 onUpdated={onUpdate}
             />
         </>
     );
 }
 
-function Color(intColor: number): string {
-    const hex = (intColor >>> 0).toString(16).padStart(8, '0');
-    return `#${hex.substring(2)}`;
-}
+// Memoize to prevent unnecessary re-renders
+export const HabitCard = memo(HabitCardComponent);

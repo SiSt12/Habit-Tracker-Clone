@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 export default function LoginPage() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [rememberMe, setRememberMe] = useState(false);
     const [loading, setLoading] = useState(false);
     const router = useRouter();
 
@@ -25,6 +26,13 @@ export default function LoginPage() {
             });
 
             if (error) throw error;
+
+            // Store remember me preference in localStorage
+            if (rememberMe) {
+                localStorage.setItem('rememberMe', 'true');
+            } else {
+                localStorage.removeItem('rememberMe');
+            }
 
             router.push('/');
         } catch (error: any) {
@@ -65,6 +73,19 @@ export default function LoginPage() {
                             placeholder="••••••••"
                             required
                         />
+                    </div>
+
+                    <div className="flex items-center">
+                        <input
+                            type="checkbox"
+                            id="rememberMe"
+                            checked={rememberMe}
+                            onChange={(e) => setRememberMe(e.target.checked)}
+                            className="w-4 h-4 rounded bg-zinc-800 border-zinc-700 text-blue-600 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <label htmlFor="rememberMe" className="ml-2 text-sm text-zinc-400 cursor-pointer select-none">
+                            Manter conectado
+                        </label>
                     </div>
 
                     <button

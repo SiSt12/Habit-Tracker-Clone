@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Check } from 'lucide-react';
 import * as Icons from 'lucide-react';
 import { api } from '@/lib/api';
+import { cn, colorToHex } from '@/lib/utils';
+import { COLORS, ICONS } from '@/lib/constants';
 
 interface AddHabitModalProps {
     isOpen: boolean;
@@ -11,42 +13,23 @@ interface AddHabitModalProps {
     onAdded: () => void;
 }
 
-const COLORS = [
-    0xFFF44336, // Red
-    0xFFE91E63, // Pink
-    0xFF9C27B0, // Purple
-    0xFF673AB7, // Deep Purple
-    0xFF3F51B5, // Indigo
-    0xFF2196F3, // Blue
-    0xFF03A9F4, // Light Blue
-    0xFF00BCD4, // Cyan
-    0xFF009688, // Teal
-    0xFF4CAF50, // Green
-    0xFF8BC34A, // Light Green
-    0xFFCDDC39, // Lime
-    0xFFFFEB3B, // Yellow
-    0xFFFFC107, // Amber
-    0xFFFF9800, // Orange
-    0xFFFF5722, // Deep Orange
-];
-
-const ICONS = [
-    'Activity', 'Book', 'Briefcase', 'Calendar', 'Camera', 'CheckCircle',
-    'Clock', 'Code', 'Coffee', 'Droplet', 'Dumbbell', 'Edit', 'FileText',
-    'Flag', 'Gift', 'Globe', 'Heart', 'Home', 'Image', 'Layers', 'Layout',
-    'Map', 'MessageCircle', 'Mic', 'Moon', 'Music', 'Package', 'PenTool',
-    'Phone', 'Play', 'Power', 'Printer', 'Radio', 'Save', 'Scissors',
-    'Search', 'Settings', 'Share', 'Shield', 'ShoppingBag', 'Smartphone',
-    'Smile', 'Speaker', 'Star', 'Sun', 'Tag', 'Target', 'Thermometer',
-    'ThumbsUp', 'Tool', 'Trash', 'Truck', 'Tv', 'Umbrella', 'User', 'Video',
-    'Voicemail', 'Volume2', 'Watch', 'Wifi', 'Zap'
-];
-
 export function AddHabitModal({ isOpen, onClose, onAdded }: AddHabitModalProps) {
     const [name, setName] = useState('');
     const [selectedIcon, setSelectedIcon] = useState('Activity');
-    const [selectedColor, setSelectedColor] = useState(COLORS[5]);
+    const [selectedColor, setSelectedColor] = useState<number>(COLORS[5]);
     const [loading, setLoading] = useState(false);
+
+    // Handle ESC key to close modal
+    useEffect(() => {
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && isOpen) {
+                onClose();
+            }
+        };
+
+        document.addEventListener('keydown', handleEscape);
+        return () => document.removeEventListener('keydown', handleEscape);
+    }, [isOpen, onClose]);
 
     if (!isOpen) return null;
 
@@ -71,8 +54,17 @@ export function AddHabitModal({ isOpen, onClose, onAdded }: AddHabitModalProps) 
         }
     };
 
+    const handleBackdropClick = (e: React.MouseEvent) => {
+        if (e.target === e.currentTarget) {
+            onClose();
+        }
+    };
+
     return (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+        <div
+            onClick={handleBackdropClick}
+            className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+        >
             <div className="bg-zinc-900 rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto border border-zinc-800">
                 <div className="p-6">
                     <div className="flex justify-between items-center mb-6">
@@ -108,7 +100,7 @@ export function AddHabitModal({ isOpen, onClose, onAdded }: AddHabitModalProps) 
                                         type="button"
                                         onClick={() => setSelectedColor(color)}
                                         className="w-8 h-8 rounded-full flex items-center justify-center transition-transform hover:scale-110"
-                                        style={{ backgroundColor: Color(color) }}
+                                        style={{ backgroundColor: colorToHex(color) }}
                                     >
                                         {selectedColor === color && <Check size={16} className="text-white" />}
                                     </button>
@@ -130,7 +122,7 @@ export function AddHabitModal({ isOpen, onClose, onAdded }: AddHabitModalProps) 
                                             key={iconName}
                                             type="button"
                                             onClick={() => setSelectedIcon(iconName)}
-                                            className={clsx(
+                                            className={cn(
                                                 "p-2 rounded-lg flex items-center justify-center transition-all",
                                                 selectedIcon === iconName
                                                     ? "bg-blue-500/20 text-blue-400 ring-1 ring-blue-500"
@@ -156,13 +148,4 @@ export function AddHabitModal({ isOpen, onClose, onAdded }: AddHabitModalProps) 
             </div>
         </div>
     );
-}
-
-function clsx(...classes: (string | boolean | undefined)[]) {
-    return classes.filter(Boolean).join(' ');
-}
-
-function Color(intColor: number): string {
-    const hex = (intColor >>> 0).toString(16).padStart(8, '0');
-    return `#${hex.substring(2)}`;
 }
